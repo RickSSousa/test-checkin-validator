@@ -1,0 +1,144 @@
+{
+  "name": "Analise de ponto",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "analise a imagem",
+        "options": {
+          "systemMessage": "Você é um agente de IA com o papel de analista de RH.\n\nAnalise se a imagem é uma folha de ponto, se possui o nome e qual é o nome do colaborador, se ela foi assinada pelo colaborador e qual o nome da empresa\n\nVocê deve retornar o json com o seguinte schema:\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"type\": \"object\",\n  \"properties\": {\n    \"status\": {\n      \"type\": \"string\",\n      \"enum\": [\"APPROVED\", \"REFUSED\", \"REVIEW\"]\n    },\n    \"obs\": {\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\"status\", \"obs\"]\n}\n\nCaso o documento cumpra com todos os parametros, o status fica approved, caso contrario fica refused e caso haja dúvidas, fica como review\n\nnas obs devem conter alguma informação caso encontre alguma dúvida como, por exemplo, \"não consegui identificar o que está escrito no nome que o funcionário escreveu\"",
+          "passthroughBinaryImages": true
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        112,
+        -64
+      ],
+      "id": "cae11d62-1c5a-4aaa-b88f-d852edb59054",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash-exp",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        112,
+        112
+      ],
+      "id": "15168b4a-911f-4616-904f-bde83666ae7a",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "vzgkpfNg4jtFdKyJ",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/upload-file",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -128,
+        -64
+      ],
+      "id": "c5626d25-a3d4-45e4-8af4-6b2d53ae86e4",
+      "name": "Webhook",
+      "webhookId": "c05c04fc-d211-46c5-8a93-b332a38c8ccf"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        624,
+        -64
+      ],
+      "id": "ace781bf-c8e7-40d3-9192-5bfe10d0c907",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Entrada esperada: $json.output (string com o que o LLM retornou)\nlet raw = $json.output ?? '';\n\n// 1) Extrai só o bloco entre ``` ``` se existir\nconst fenced = raw.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);\nlet s = fenced ? fenced[1].trim() : raw.trim();\n\n// 2) Remove cercas remanescentes e BOM\ns = s.replace(/```/g, '').replace(/^\\uFEFF/, '').trim();\n\n// 3) Remove vírgulas à direita antes de ] ou }\ns = s.replace(/,\\s*([}\\]])/g, '$1');\n\n// 4) Parse seguro\nlet data;\ntry {\n  data = JSON.parse(s);\n} catch (e) {\n  throw new Error('Falha ao parsear JSON da saída do LLM. Conteúdo após limpeza:\\n' + s);\n}\n\n// 5) Normaliza para array\nif (!Array.isArray(data)) data = [data];\n\n// 6) Retorna tudo em um único item com chave 'products' e 'quantidade'\nreturn [\n  {\n    json: {\n      products: data,\n      quantidade: data.length\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        -64
+      ],
+      "id": "5b088e87-eaec-4846-8880-e3fcaa113bf0",
+      "name": "Code"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "6b18397e-4f41-4fba-8cb1-45d99da83d40",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "1bffa5d1115eb2006ab76431080c29ac00c781f0f0b7e51c3619f9226bbbb775"
+  },
+  "id": "hIHkvyFtLTJ38BGK",
+  "tags": []
+}
